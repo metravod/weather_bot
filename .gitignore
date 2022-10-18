@@ -1,2 +1,3 @@
 settings/bot_config.py
 settings/api_config.py
+settings/database_config.py

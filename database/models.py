@@ -11,10 +11,10 @@ Base = declarative_base()
 
 
 class User(Base):
-    __tablename__ = 'users'
+    __tablename__ = 'Users'
     id = Column(Integer, primary_key=True)
     tg_id = Column(BigInteger, nullable=False)
-    city = Column(String, nullable=False)
+    city = Column(String)
     connection_date = Column(DateTime, default=datetime.now, nullable=False)
     reports = relationship('WeatherReport', backref='report', lazy=True, cascade='all, delete-orphan')
 
@@ -23,7 +23,7 @@ class User(Base):
 
 
 class WeatherReport(Base):
-    __tablename__ = 'weather_reports'
+    __tablename__ = 'WeatherReports'
     id = Column(Integer, primary_key=True)
     owner = Column(Integer, ForeignKey('Users.id'), nullable=False)
     date = Column(DateTime, default=datetime.now, nullable=False)
