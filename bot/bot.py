@@ -1,13 +1,13 @@
 import math
 
 from aiogram import Bot, Dispatcher, types, executor
-from aiogram.dispatcher import FSMContext
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.dispatcher import FSMContext
 
 from settings import bot_config
 from api_request import request
-from database.orm import add_user, set_user_city, create_report, get_user_city, get_reports
+from database import orm
 
 
 bot = Bot(token=bot_config.bot_token)
@@ -25,7 +25,7 @@ class SetUserCity(StatesGroup):
 
 @dp.message_handler(commands=['start'])
 async def start_message(message: types.Message):
-    add_user(message.from_user.id)
+    orm.add_user(message.from_user.id)
     markup = types.reply_keyboard.ReplyKeyboardMarkup(row_width=2)
     btn1 = types.KeyboardButton('Погода в моём городе')
     btn2 = types.KeyboardButton('Погода в другом месте')
@@ -33,6 +33,34 @@ async def start_message(message: types.Message):
     btn4 = types.KeyboardButton('Установить свой город')
     markup.add(btn1, btn2, btn3, btn4)
     text = f'Привет {message.from_user.first_name}, я бот, который расскжет тебе о погоде на сегодня'
+    await message.answer(text, reply_markup=markup)
+
+
+@dp.message_handler(regexp='Погода в моём городе')
+async def get_user_city_weather(message: types.Message):
+    markup = types.reply_keyboard.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    btn1 = types.KeyboardButton('Меню')
+    markup.add(btn1)
+    city = orm.get_user_city(message.from_user.id)
+    if city is None:
+        text = 'Пожалуйста установите город проживания'
+        markup = types.reply_keyboard.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+        btn1 = types.KeyboardButton('Установить свой город')
+        await message.answer(text, reply_markup=markup)
+        return
+    data = request.get_weather(city)
+    orm.create_report(
+        message.from_user.id,
+        data["temp"],
+        data["feels_like"],
+        data["wind_speed"],
+        data["pressure_mm"],
+        city
+    )
+    text = f'Погода в {city}\nТемпература: {data["temp"]} C\n' \
+           f'Ощущается как: {data["feels_like"]} C \n' \
+           f'Скорость ветра: {data["wind_speed"]}м/с\n' \
+           f'Давление: {data["pressure_mm"]}мм'
     await message.answer(text, reply_markup=markup)
 
 
@@ -48,38 +76,8 @@ async def start_message(message: types.Message):
     await message.answer(text, reply_markup=markup)
 
 
-@dp.message_handler(regexp='Погода в моём городе')
-async def get_user_city_weather(message):
-    markup = types.reply_keyboard.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    btn1 = types.KeyboardButton('Меню')
-    markup.add(btn1)
-    city = get_user_city(message.from_user.id)
-    if city is None:
-        text = 'Пожалуйста установите город проживания'
-        markup = types.reply_keyboard.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-        btn1 = types.KeyboardButton('Установить свой город')
-        markup.add(btn1)
-        await message.answer(text, reply_markup=markup)
-        return
-    data = request.get_weather(city)
-    create_report(
-        message.from_user.id,
-        data['temp'],
-        data['feels_like'],
-        data['wind_speed'],
-        data['pressure_mm'],
-        city
-    )
-    text = f' Погода в {city}\n' \
-           f'Температура: {data["temp"]} C\n' \
-           f'Ощущается как: {data["feels_like"]} C \n' \
-           f'Скорость ветра: {data["wind_speed"]}м/с\n' \
-           f'Давление: {data["pressure_mm"]}мм'
-    await message.answer(text, reply_markup=markup)
-
-
 @dp.message_handler(regexp='Погода в другом месте')
-async def city_start(message):
+async def city_start(message: types.Message):
     markup = types.reply_keyboard.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     btn1 = types.KeyboardButton('Меню')
     markup.add(btn1)
@@ -102,18 +100,18 @@ async def city_chosen(message: types.Message, state: FSMContext):
     markup.add(btn1, btn2, btn3, btn4)
     city = await state.get_data()
     data = request.get_weather(city.get('waiting_city'))
-    create_report(
+    orm.create_report(
         message.from_user.id,
-        data['temp'],
-        data['feels_like'],
-        data['wind_speed'],
-        data['pressure_mm'],
+        data["temp"],
+        data["feels_like"],
+        data["wind_speed"],
+        data["pressure_mm"],
         city.get('waiting_city')
     )
-    text = f' Погода в {city.get("waiting_city")}\n'\
-           f'Температура: {data["temp"]} C\n'\
-           f'Ощущается как: {data["feels_like"]} C \n'\
-           f'Скорость ветра: {data["wind_speed"]}м/с\n'\
+    text = f'Погода в {city.get("waiting_city")}\n' \
+           f'Температура: {data["temp"]} C\n' \
+           f'Ощущается как: {data["feels_like"]} C \n' \
+           f'Скорость ветра: {data["wind_speed"]}м/с\n' \
            f'Давление: {data["pressure_mm"]}мм'
     await message.answer(text, reply_markup=markup)
     await state.finish()
@@ -136,7 +134,7 @@ async def user_city_chosen(message: types.Message, state: FSMContext):
         return
     await state.update_data(waiting_user_city=message.text)
     user_data = await state.get_data()
-    set_user_city(message.from_user.id, user_data.get('waiting_user_city'))
+    orm.set_user_city(message.from_user.id, user_data.get('waiting_user_city'))
     markup = types.reply_keyboard.ReplyKeyboardMarkup(row_width=2)
     btn1 = types.KeyboardButton('Погода в моём городе')
     btn2 = types.KeyboardButton('Погода в другом месте')
@@ -148,10 +146,10 @@ async def user_city_chosen(message: types.Message, state: FSMContext):
     await state.finish()
 
 
-@dp.message_handler(regexp='История')
+@dp.message_handler(regexp= 'История')
 async def get_reports(message: types.Message):
     current_page = 1
-    reports = get_reports(message.from_user.id)
+    reports = orm.get_reports(message.from_user.id)
     total_pages = math.ceil(len(reports) / 4)
     text = 'История запросов:'
     inline_markup = types.InlineKeyboardMarkup()
@@ -166,6 +164,72 @@ async def get_reports(message: types.Message):
         types.InlineKeyboardButton(text='Вперёд', callback_data=f'next_{current_page}')
     )
     await message.answer(text, reply_markup=inline_markup)
+
+
+@dp.callback_query_handler(lambda call: True)
+async def callback_query(call, state: FSMContext):
+    query_type = call.data.split('_')[0]
+    async with state.proxy() as data:
+        data['current_page'] = int(call.data.split('_')[1])
+        await state.update_data(current_page=data['current_page'])
+        if query_type == 'next':
+            reports = orm.get_reports(call.from_user.id)
+            total_pages = math.ceil(len(reports) / 4)
+            inline_markup = types.InlineKeyboardMarkup()
+            if data['current_page']*4 >= len(reports):
+                for report in reports[data['current_page']*4-4:len(reports) + 1]:
+                    inline_markup.add(types.InlineKeyboardButton(
+                    text=f'{report.city} {report.date.day}.{report.date.month}.{report.date.year}',
+                    callback_data=f'report_{report.id}'
+                    ))
+                data['current_page'] -= 1
+                inline_markup.row(
+                    types.InlineKeyboardButton(text='Назад', callback_data=f'prev_{data["current_page"]}'),
+                    types.InlineKeyboardButton(text=f'{data["current_page"]+1}/{total_pages}', callback_data='None')
+                )
+                await call.message.edit_text(text="История запросов:", reply_markup=inline_markup)
+                return
+            for report in reports[data['current_page']*4-4:data['current_page']*4]:
+                inline_markup.add(types.InlineKeyboardButton(
+                text=f'{report.city} {report.date.day}.{report.date.month}.{report.date.year}',
+                callback_data=f'report_{report.id}'
+            ))
+            data['current_page'] += 1
+            inline_markup.row(
+                types.InlineKeyboardButton(text='Назад', callback_data=f'prev_{data["current_page"]-2}'),
+                types.InlineKeyboardButton(text=f'{data["current_page"]-1}/{total_pages}', callback_data='None'),
+                types.InlineKeyboardButton(text='Вперёд', callback_data=f'next_{data["current_page"]}')
+            )
+            await call.message.edit_text(text="История запросов:", reply_markup=inline_markup)
+        if query_type == 'prev':
+            reports = orm.get_reports(call.from_user.id)
+            total_pages = math.ceil(len(reports) / 4)
+            inline_markup = types.InlineKeyboardMarkup()
+            if data['current_page'] == 1:
+                for report in reports[0:data['current_page']*4]:
+                    inline_markup.add(types.InlineKeyboardButton(
+                    text=f'{report.city} {report.date.day}.{report.date.month}.{report.date.year}',
+                    callback_data=f'report_{report.id}'
+                    ))
+                data['current_page'] += 1
+                inline_markup.row(
+                    types.InlineKeyboardButton(text=f'{data["current_page"]-1}/{total_pages}', callback_data='None'),
+                    types.InlineKeyboardButton(text='Вперёд', callback_data=f'next_{data["current_page"]}')
+                )
+                await call.message.edit_text(text="История запросов:", reply_markup=inline_markup)
+                return
+            for report in reports[data['current_page']*4-4:data['current_page']*4]:
+                inline_markup.add(types.InlineKeyboardButton(
+                text=f'{report.city} {report.date.day}.{report.date.month}.{report.date.year}',
+                callback_data=f'report_{report.id}'
+                ))
+            data['current_page'] -= 1
+            inline_markup.row(
+                types.InlineKeyboardButton(text='Назад', callback_data=f'prev_{data["current_page"]}'),
+                types.InlineKeyboardButton(text=f'{data["current_page"]+1}/{total_pages}', callback_data='None'),
+                types.InlineKeyboardButton(text='Вперёд', callback_data=f'next_{data["current_page"]}'),
+            )
+            await call.message.edit_text(text="История запросов:", reply_markup=inline_markup)
 
 
 if __name__ == '__main__':

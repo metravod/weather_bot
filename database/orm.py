@@ -42,7 +42,8 @@ def get_reports(tg_id):
     Session = sessionmaker(bind=engine)
     session = Session()
     user = session.query(User).filter(User.tg_id == tg_id).first()
-    return user.reports
+    reports = user.reports
+    return reports
 
 
 def create_report(tg_id, temp, feels_like, wind_speed, pressure_mm, city) -> None:
