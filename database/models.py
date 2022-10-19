@@ -1,10 +1,12 @@
 from datetime import datetime
 
-from sqlalchemy import Table, Column, ForeignKey
+from sqlalchemy import Column, ForeignKey
 from sqlalchemy import DateTime, Integer, BigInteger, String, Float
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
+
+from settings import database_config
 
 
 Base = declarative_base()
@@ -38,7 +40,7 @@ class WeatherReport(Base):
 
 
 # Создаем движок
-engine = create_engine('postgresql://postgres:postgres@localhost:5432/postgres', echo=True)
+engine = create_engine(database_config.url, echo=True)
 Base.metadata.create_all(engine)
 
 # Создаем сессию
