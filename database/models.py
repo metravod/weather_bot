@@ -30,7 +30,7 @@ class WeatherReport(Base):
     temp = Column(Float, nullable=False)
     feels_like = Column(Float, nullable=False)
     wind_speed = Column(Float, nullable=False)
-    presuare_mm = Column(Float, nullable=False)
+    pressure_mm = Column(Float, nullable=False)
     city = Column(String, nullable=False)
 
     def __repr__(self):
